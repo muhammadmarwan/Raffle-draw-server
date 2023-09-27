@@ -6,6 +6,8 @@ const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const User = require('./models/user');
 const Bottle = require('./models/bottle');
+const Transaction = require('./models/transaction');
+const Raffle = require('./models/raffle');
 const cors = require('cors'); 
 
 const app = express();
@@ -97,13 +99,12 @@ app.post('/signin', async (req, res) => {
 app.post('/add-bottle',authenticateToken, async (req, res) => {
     try {
       const { name, brand } = req.body;
-      const userId = req.user.id; 
 
-      if (!name || !brand || !userId) {
+      if (!name || !brand ) {
         return res.status(400).json({ error: 'All feilds required' });
       }
 
-      const bottle = new Bottle({ name, brand, userId });
+      const bottle = new Bottle({ name, brand });
   
       await bottle.save();
   
@@ -114,11 +115,29 @@ app.post('/add-bottle',authenticateToken, async (req, res) => {
     }
 });
 
+app.post('/bottle-transaction',authenticateToken, async (req, res) => {
+  try {
+    const { bottleId } = req.body;
+    const userId = req.user.id; 
+
+    if (!bottleId || !userId ) {
+      return res.status(400).json({ error: 'All feilds required' });
+    }
+
+    const bottleTransaction = new Transaction({ bottleId, userId });
+
+    await bottleTransaction.save();
+
+    res.status(201).json({ message: 'Bottle added to bin' });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
 app.get('/user-bottles', authenticateToken, async (req, res) => {
-    try {
-      const userId = req.user.id; 
-  
-      const userBottles = await Bottle.find({ userId });
+    try {  
+      const userBottles = await Bottle.find();
   
       res.status(200).json(userBottles);
     } catch (error) {
@@ -128,30 +147,39 @@ app.get('/user-bottles', authenticateToken, async (req, res) => {
   });
 
 
-app.post('/set-raffle', authenticateToken, async (req, res) => {
-try {
-    const userId = req.user.id; 
-    const { count } = req.body;
+  app.post('/set-raffle', authenticateToken, async (req, res) => {
+    try {
+      const { count } = req.body;
+      const userId = req.user.id;
+  
+      if (!count) {
+        return res.status(400).json({ error: 'Fields required' });
+      }
+  
+      const transactions = await Transaction.find({})
+        .sort({ createdDate: -1 }) 
+        .limit(count);
+  
+      for (const transaction of transactions) {
+        await Transaction.findByIdAndUpdate(transaction._id, { raffle: 1 });
 
-    const userBottles = await Bottle.find({ userId, raffle: 0 }).limit(count);
-
-    for (const bottle of userBottles) {
-    bottle.raffle = 1;
-    await bottle.save();
+        const raffle = new Raffle({ bottleId: transaction.bottleId, transactionId: transaction._id, userId });
+        await raffle.save();
+      }
+  
+      res.status(201).json({ message: 'Bottle(s) added successfully to raffle' });
+    } catch (error) {
+      console.error(error);
+      res.status(500).json({ message: 'Server error' });
     }
-
-    res.status(200).json({ message: `Set raffle for ${userBottles.length} bottles` });
-} catch (error) {
-    console.error(error);
-    res.status(500).json({ message: 'Server error' });
-}
-});  
+  });
+  
 
 app.get('/count-raffle-pending', authenticateToken, async (req, res) => {
     try {
       const userId = req.user.id; 
   
-      const count = await Bottle.countDocuments({ userId, raffle: 0 });
+      const count = await Transaction.countDocuments({ userId, raffle: 0 });
   
       res.status(200).json({ Count : count });
     } catch (error) {
