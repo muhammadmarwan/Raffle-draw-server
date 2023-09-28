@@ -163,7 +163,7 @@ app.get('/user-bottles', authenticateToken, async (req, res) => {
       for (const transaction of transactions) {
         await Transaction.findByIdAndUpdate(transaction._id, { raffle: 1 });
 
-        const raffle = new Raffle({ bottleId: transaction.bottleId, transactionId: transaction._id, userId });
+        const raffle = new Raffle({ transactionId: transaction._id });
         await raffle.save();
       }
   
